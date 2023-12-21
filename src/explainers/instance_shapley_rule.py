@@ -10,136 +10,15 @@ import random
 import pandas as pd
 from sklearn.linear_model import LinearRegression
 from scipy.optimize import minimize
+from torch_geometric.data import Data
 
 
-class ShapleyRule():
-    def __init__(self, dataset_name, model, dataset, dataloaders, activation_rules,
-                 approx_limit=10, nb_layers: int = 3, targeted_class: int = 0, strategy: str = 'deactivate'):
-        """
-
-        :param dataset_name: name of the dataset
-        :param model: torch model
-        :param dataset: torch dataset
-        :param dataloaders: data loaders as dictionary
-        :param activation_rules: list of tuples (layer, rule, target_class)
-        :param approx_limit:
-        :param nb_layers:
-        """
-        self.dataset_name = dataset_name
-        self.model = model
-        self.dataset = dataset
-        self.activation_rules = activation_rules
-        self.rules = [x[1] for x in self.activation_rules]
-        self.rules_layers = [x[0] for x in self.activation_rules]
-        self.rules_index = list(range(len(self.rules)))
-        self.rule_targeted_class = [x[2] for x in self.activation_rules]
-        self.approx_limit = approx_limit
-        self.val_dict = {}
-        self.nb_rules = len(self.rules)
-        self.nb_layers = nb_layers
-        self.dataloaders = dataloaders
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.targeted_class = targeted_class
-        self.strategy = strategy
-        if strategy not in ['desactivate', 'replace']:
-            raise ValueError("Strategy must be either 'desactivate' or 'replace'")
-
-    def characteristic_function(self, coalition) -> ndarray:
-        """
-        Computes the characteristic function of the rule for the given index
-        :param coalition:
-        :return:
-        """
-        coalition_code = ''.join([str(x) for x in coalition])
-        if coalition_code in self.val_dict:
-            return self.val_dict[coalition_code]
-        else:
-            rules_to_deactivate = [x for x in self.rules_index if x not in coalition]
-            rules_mask = []
-            for i in range(self.nb_layers):
-                layer_mask = np.ones((len(self.rules[0])))
-                for rule_idx in rules_to_deactivate:
-                    if self.rules_layers[rule_idx] == i:
-                        rule = np.array(self.rules[rule_idx])
-                        layer_mask[rule == 1] = 0
-                for rule_idx in coalition:
-                    if self.rules_layers[rule_idx] == i:
-                        rule = np.array(self.rules[rule_idx])
-                        layer_mask[rule == 1] = 1
-                rules_mask.append(layer_mask)
-            rules_mask = np.array(rules_mask)
-            rules_mask = torch.from_numpy(rules_mask).float()
-            rules_mask = rules_mask.to(self.device)
-            val = []
-            for batch in self.dataloaders['train']:
-                batch = batch.to(self.device)
-                masked_batch_preds = self.model(data=batch, deactivated_rules=rules_mask)
-                # Apply softmax
-                masked_batch_preds = torch.nn.functional.softmax(masked_batch_preds, dim=1)
-                masked_batch_preds = masked_batch_preds.detach().cpu().numpy()
-                masked_batch_preds = masked_batch_preds[:, self.targeted_class]
-                val.append(masked_batch_preds)
-            val = np.concatenate(val)
-            self.val_dict[coalition_code] = val
-            return val
-
-    def get_coalitions(self, rule_index: list) -> list:
-        """
-        Computes all the possible coalitions of rules
-        :param rules: list of rules
-        :return:
-        """
-        candidates = self.rules_index.copy()
-
-        candidates.remove(rule_index)
-        # Generate all combinations of rules using itertools
-        coalitions = []
-        for i in range(len(candidates)):
-            coalitions += combinations(candidates, i)
-        # Add the full coalition
-        coalitions.append(tuple(candidates))
-        # Remove the empty coalition
-        coalitions.remove(())
-        # Turn the coalitions into a list of lists
-        coalitions = [list(coalition) for coalition in coalitions]
-        return coalitions
-
-    def get_contrib(self, index):
-        """
-        Computes the contribution of a rule
-        :param index:
-        :return:
-        """
-        phi = 0
-        coalitions = self.get_coalitions(index)
-        if len(self.rules) <= self.approx_limit:
-            for coalition in coalitions:
-                len_s = len(coalition)
-                weight = factorial(len_s) * factorial(self.nb_rules - len_s - 1) / factorial(self.nb_rules)
-                vals = self.characteristic_function(coalition + [index]) - self.characteristic_function(coalition)
-                phi += weight * (np.mean(vals))
-            return phi
-        else:
-            # Approximate the Shapley value
-            raise NotImplementedError("Approximation of Shapley values is not implemented yet")
-            for _ in range(self.max_iter):
-                # Draw a random instance
-                pass
-
-    def get_shapley_values(self):
-        """
-        Computes the Shapley values for all rules on a given class
-        :return:
-        """
-        shapley_values = []
-        for index in tqdm(self.rules_index):
-            shapley_values.append(self.get_contrib(index))
-        return shapley_values
 
 
-class KernelShapRule():
+
+class KernelShapRuleInstance():
     def __init__(self, dataset_name, model, dataset, dataloaders, activation_rules, nb_layers: int = 3, k=None,
-                 targeted_class: int = 0, strategy='deactivate'):
+                 targeted_class: int = 0, strategy='deactivate', instance: Data = None):
         """
 
         :param dataset_name: name of the dataset
@@ -150,6 +29,7 @@ class KernelShapRule():
         :param approx_limit:
         :param nb_layers:
         """
+        self.instance = instance
         self.intercept_ = None
         self.coef_ = None
         self.dataset_name = dataset_name
@@ -176,6 +56,7 @@ class KernelShapRule():
         self.df = pd.DataFrame(columns=self.rules_index + ['score', 'weight'])
         if k is not None:
             self.add_sampled_coalition(k)
+        
 
     def get_rule_mask(self, coalition):
         """
@@ -235,36 +116,18 @@ class KernelShapRule():
         :param coalition:
         :return:
         """
-        """rules_mask = self.get_rule_mask(coalition)
-        val = []
-        for batch in self.dataloaders['train']:
-            batch = batch.to(self.device)
-            masked_batch_preds = self.model(data=batch, deactivated_rules=rules_mask)
-            # Apply softmax
-            masked_batch_preds = torch.nn.functional.softmax(masked_batch_preds, dim=1)
-            masked_batch_preds = masked_batch_preds.detach().cpu().numpy()
-            masked_batch_preds = masked_batch_preds[:, self.targeted_class]
-            val.append(masked_batch_preds)
-        val = np.concatenate(val)
-        return val"""
         rules_mask = self.get_rule_mask(coalition)
-        val = [ ]
-        for batch in self.dataloaders['train']:
-            batch = batch.to(self.device)
-            masked_batch_preds = self.model(data=batch, deactivated_rules=rules_mask) # y
-            # Apply softmax
-            masked_batch_preds = torch.nn.functional.softmax(masked_batch_preds, dim=1)
-            masked_batch_preds = masked_batch_preds.detach().cpu().numpy()
-            actual_preds = self.model(data=batch) # x
-            actual_preds = torch.nn.functional.softmax(actual_preds, dim=1)
-            actual_preds = actual_preds.detach().cpu().numpy()
+        with torch.no_grad():
+            masked_preds = self.model(data=self.instance, deactivated_rules=rules_mask)
+            masked_preds = torch.nn.functional.softmax(masked_preds, dim=1)
 
-            for i in range(len(masked_batch_preds)):
-                if np.argmax(actual_preds[i]) == self.targeted_class:
-                    val.append(np.exp(-(l2_norm(actual_preds[i], masked_batch_preds[i]))))
-                else:
-                    val.append(np.exp(-(l2_norm(actual_preds[i], masked_batch_preds[i][::-1]))))
-        return val
+            model_pred = self.model(data=self.instance)
+            model_pred = torch.nn.functional.softmax(model_pred, dim=1)
+
+            if np.argmax(model_pred) == self.targeted_class:
+                return np.exp(-(l2_norm(model_pred, masked_preds)))
+            else:
+                return np.exp(-(l2_norm(model_pred[0].detach().numpy(), masked_preds[0].detach().numpy()[::-1])))
 
 
     def __get_replacement_mask_prediction(self, coalition):
@@ -444,4 +307,22 @@ class KernelShapRule():
         acc = np.sum(masked_preds[actual_preds == self.targeted_class] == self.targeted_class) / np.sum(actual_preds == self.targeted_class)
         print(f'Accuracy of the perturbed model: {acc:.3f}')
         return val
+
+
+    def plot_instance_rule_contrib(contrib_array):
+        """
+        Plot the contribution of each rule in the instance
+        :param contrib_array: array of contributions of each rule
+        :return: None
+        """
+        # Plot a beeswarm plot of the contributions
+        import matplotlib.pyplot as plt
+        plt.figure(figsize=(8, 6))
+        plt.title("Rule contribution to the prediction")
+        plt.ylabel("Contribution")
+        plt.xlabel("Rule")
+
+        # Plot contribution using density box horizontal with one row for each rule
+        plt.boxplot(contrib_array, vert=False, showfliers=False)
+        plt.show()
 

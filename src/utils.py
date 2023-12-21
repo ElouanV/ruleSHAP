@@ -40,6 +40,9 @@ def parse_rules(csv_path, emb_size=20):
     for line in lines:
         space_split=line.split(' ')
         target_class = space_split[3].split(':')[1]
+        rule_score = float(space_split[6].split(':')[1])
+        c0_score = float(space_split[7].split(':')[1])
+        c1_score = float(space_split[8].split(':')[1])
         activation = np.zeros(emb_size)
         eq_split = line.split('=')
         # Remove /n
@@ -57,6 +60,6 @@ def parse_rules(csv_path, emb_size=20):
             comp = component_split[1]
 
             activation[int(comp)] = 1
-        rules.append((int(rule_layer), activation, int(target_class)))
+        rules.append((int(rule_layer), activation, int(target_class), rule_score, c0_score, c1_score))
     return rules
 

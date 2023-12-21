@@ -336,3 +336,11 @@ def get_edge_distribution(graphs, features, labels=None, max_degre=20):
 
 
 
+def l2_norm(x, y):
+    """
+    Compute the L2 norm between two vectors
+    :param x:
+    :param y:
+    :return:
+    """
+    return np.linalg.norm(x - y, ord=2)
