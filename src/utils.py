@@ -63,3 +63,27 @@ def parse_rules(csv_path, emb_size=20):
         rules.append((int(rule_layer), activation, int(target_class), rule_score, c0_score, c1_score))
     return rules
 
+
+def get_graph_list_from_rule(dataset, rule_file_path):
+    """Generate the list of graph taht activated a rule by parsing the file.
+
+    Args:
+        dataset (_type_): _description_
+        rule (_type_): _description_
+    """
+    with open(rule_file_path, 'r') as f:
+        lines = f.readlines()
+    graphs = []
+    for line in lines:
+        if line[0] == 't':
+            info = line.split(' ')[3]
+            graph_id = int(info.split(',')[1])
+            graphs.append(graph_id)
+    # Remove duplicates
+    graphs = list(set(graphs))
+    return graphs
+
+    
+
+
+

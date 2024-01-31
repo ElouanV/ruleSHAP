@@ -11,6 +11,8 @@ def get_dataset(dataset_root, dataset_name):
     elif dataset_name.lower() in ["ba_2motifs"]:
         dataset  = BA2MotifDataset(root=dataset_root)
         return dataset
+    elif dataset_name.lower() in ["mutag"]:
+        return TUDataset(root=dataset_root, name="MUTAG")
     else:
         raise ValueError(f"{dataset_name} is not defined.")
 

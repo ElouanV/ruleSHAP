@@ -8,13 +8,13 @@ param:
     milestones: None
     gamma: None
     batch_size: 32
-    num_epochs: 80
+    num_epochs: 1000
     num_early_stop: 100
     gnn_latent_dim:
-      - 16
-      - 16
-      - 16
-    gnn_dropout: 0.2
+      - 20
+      - 20
+      - 20
+    gnn_dropout: 0.
     add_self_loop: True
     gcn_adj_normalization: False
     gnn_emb_normalization: False
@@ -118,18 +118,18 @@ param:
     fc_dropout: 0.0
     fc_nonlinear: 'relu'
   mnist:
-    learning_rate: 0.005
+    learning_rate: 0.0007
     weight_decay: 0
     milestones: None
     gamma: None
     batch_size: 32
-    num_epochs: 500
+    num_epochs: 100
     num_early_stop: 100
     gnn_latent_dim:
-      - 32
-      - 32
-      - 32
-    gnn_dropout: 0.2
+      - 64
+      - 64
+      - 64
+    gnn_dropout: 0.4
     add_self_loop: True
     gcn_adj_normalization: True
     gnn_emb_normalization: False
@@ -187,6 +187,29 @@ param:
       fc_dropout: 0.0
       fc_nonlinear: 'relu'
   twitter:
+    learning_rate: 0.001
+    weight_decay: 5e-4
+    milestones: None
+    gamma: None
+    batch_size: 128
+    num_epochs: 50
+    num_early_stop: 0
+    gnn_latent_dim:
+      - 128
+      - 128
+      - 128
+    gnn_dropout: 0.0
+    add_self_loop: True
+    gcn_adj_normalization: True
+    gnn_emb_normalization: False
+    graph_classification: True
+    node_classification: False
+    gnn_nonlinear: 'relu'
+    readout: 'max'
+    fc_latent_dim: [ ]
+    fc_dropout: 0.0
+    fc_nonlinear: 'relu'
+  imdb_binary:
     learning_rate: 0.001
     weight_decay: 5e-4
     milestones: None

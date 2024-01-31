@@ -124,10 +124,8 @@ class KernelShapRuleInstance():
             model_pred = self.model(data=self.instance)
             model_pred = torch.nn.functional.softmax(model_pred, dim=1)
 
-            if np.argmax(model_pred) == self.targeted_class:
-                return np.exp(-(l2_norm(model_pred, masked_preds)))
-            else:
-                return np.exp(-(l2_norm(model_pred[0].detach().numpy(), masked_preds[0].detach().numpy()[::-1])))
+            return l2_norm(model_pred, masked_preds)
+
 
 
     def __get_replacement_mask_prediction(self, coalition):
@@ -168,7 +166,6 @@ class KernelShapRuleInstance():
         :param n:
         :return:
         """
-        print(f"Adding {k} sampled coalitions")
         for _ in tqdm(range(k)):
             coalition_size = random.randint(1, len(self.rules_index))
             coalition = random.sample(self.rules_index, coalition_size)
@@ -179,7 +176,6 @@ class KernelShapRuleInstance():
                 else:
                     row.append(0)
             score = np.mean(self.get_prediction(coalition))
-            # print(score)
             row.append(score)
             weight = self.__compute__coalition_weight(coalition)
             row.append(weight)
@@ -195,7 +191,6 @@ class KernelShapRuleInstance():
 
         X = self.df.drop(columns=['score', 'weight'])
         y = self.df['score']
-        print (y)
         # Solve a weighted linear regression problem
         f = np.array(y.values)
         w = self.df['weight']
@@ -208,8 +203,7 @@ class KernelShapRuleInstance():
 
         res = minimize(objective, initial_params, method='nelder-mead', tol=1e-6)
         optimal_param = res.x
-        self.coef_ = optimal_param[:-1]
-        self.intercept_ = optimal_param[-1]
+        self.coef_ = optimal_param
 
     def __compute__coalition_weight(self, coalition):
         """
@@ -265,7 +259,6 @@ class KernelShapRuleInstance():
         coalition = rules.index.tolist()
         #rules_to_deactivate = [x for x in self.rules_index if x not in coalition]
 
-        print(coalition)
         rules_to_deactivate = coalition
         rules_mask = []
         for i in range(self.nb_layers):
@@ -309,20 +302,5 @@ class KernelShapRuleInstance():
         return val
 
 
-    def plot_instance_rule_contrib(contrib_array):
-        """
-        Plot the contribution of each rule in the instance
-        :param contrib_array: array of contributions of each rule
-        :return: None
-        """
-        # Plot a beeswarm plot of the contributions
-        import matplotlib.pyplot as plt
-        plt.figure(figsize=(8, 6))
-        plt.title("Rule contribution to the prediction")
-        plt.ylabel("Contribution")
-        plt.xlabel("Rule")
 
-        # Plot contribution using density box horizontal with one row for each rule
-        plt.boxplot(contrib_array, vert=False, showfliers=False)
-        plt.show()
 

@@ -13,6 +13,7 @@ from models.gnnNets import get_gnnNets
 from utils import parse_rules
 import numpy as np
 from tqdm import tqdm
+from utils import check_dir
 
 
 def simple_rule_score(model, dataset, dataloader, activation_rules, df, k=100):
@@ -66,9 +67,6 @@ def progressive_rule_score(model, dataset, dataloader, activation_rules, targete
 
 @hydra.main(version_base=None, config_path="config", config_name="config")
 def main(config):
-
-    TARGET_CLASS = 1
-    k = 1_000
     config.models.gnn_saving_path = os.path.join(
         hydra.utils.get_original_cwd(), config.models.gnn_saving_path
     )
@@ -91,70 +89,43 @@ def main(config):
     dataloader = get_data_loader(dataset, config.models.param.batch_size, config.datasets.random_split_flag,
                                  config.datasets.data_split_ratio, config.datasets.seed)
 
-    activation_rules = parse_rules('ExplanationEvaluation/ba_2motifs_encode_motifs.csv', emb_size=16)
+
+    activation_rules = parse_rules(f'ExplanationEvaluation/{config.datasets.dataset_name}_encode_motifs.csv', emb_size=128)
+    if len(activation_rules) == 0:
+        raise ValueError('No rules found, check if the path is correct')
+    execution_times = pd.DataFrame(columns=['nb_rule', 'k', 'strategy', 'time'])
+    df_results = pd.DataFrame(columns=['rule_id', 'contribution_class_0', 'contribution_class_1',
+                                        'target_class_SHAP', 'k_SHAP', 'startegy_SAHP'], index=None)
+    for target_class in [0, 1]:
+        # Keep only rules that are activated for the target class
+        rules = [rule for rule in activation_rules if rule[2] == target_class]
+        print(f'Number of rules for class {target_class}: {len(rules)}')
+        for k in [1000]:
+            for strategy in ['deactivate']:
+                estimator_0 = KernelShapRule('mutag', model, dataset, dataloader, rules, targeted_class=0,
+                                           strategy=strategy)
+                start = time.time()
+                estimator_0.add_sampled_coalition(k)
+                estimator_0.fit()
+                values_0 = estimator_0.get_shapley_values()
+                estimator_1 = KernelShapRule('mutag', model, dataset, dataloader, rules, targeted_class=1,
+                                           strategy=strategy)
+                estimator_1.add_sampled_coalition(k)
+                estimator_1.fit()
+                values_1 = estimator_1.get_shapley_values()
+                end = time.time()
+                print(f'\nTook {(end - start):.3f} seconds \n')
+                # Rounded to 3 decimals the time taken
+                execution_times.loc[len(execution_times)] = [len(rules), k, strategy, round((end - start), 3)]
+                for i in range(len(values_0)):
+                    df_results.loc[len(df_results)] = [i, values_0[i], values_1[i], target_class, k, strategy]
+    path_to_save = "results/rule_scores"
+    check_dir(path_to_save)
+    # execution_times.to_csv(f'{path_to_save}/exp_execution_times.csv', index=False)
+    # df_results.to_csv(f'{path_to_save}/df_results_50000.csv', index=False)
 
 
-    """
-    print(f'Activation rules length: {len(activation_rules)}')
-    # Only keep acitvation rule of class 0
-    activation_rules = [rule for rule in activation_rules if rule[2] == TARGET_CLASS]
-    df_result = pd.DataFrame(columns=['rule_layer', 'rule_vector', 'rule_target', 'contribution_class_0',
-                                      'contribution_class_1'])
-    for i, (layer, vector, target, _, _, _) in enumerate(activation_rules):
-        df_result.loc[i] = [layer, vector, target, 0, 0, ]
-    for layer, vector, target, _, _, _ in activation_rules:
-        print(f'Layer: {layer}, Vector: {vector}, Target: {target}')
-    print(f'Number of rules: {len(activation_rules)}')
-    df = simple_rule_score(model, dataset, dataloader, activation_rules, df_result, k=k)
-
-    # Add rule from activation_rules to the df
-    df['rule_inside_score'] = [val[3] for val in activation_rules]
-    df['rule_inside_score_c0'] = [val[4] for val in activation_rules]
-    df['rule_inside_score_c1'] = [val[5] for val in activation_rules]
-
-    df.to_csv(f'ExplanationEvaluation/ex_ba_2motifs_kernel_shapley_rule{TARGET_CLASS}_k{k}.csv', index=False)
-    print(df)
-    print(len(df))
-    # Plot the values for each rule with the rule_target as color according to the rule_inside_score
-    plt.scatter(df['contribution_class_0'], df['contribution_class_1'], c=df['rule_inside_score'], cmap='viridis')
-    plt.colorbar()
-    plt.xlabel('Contribution to class 0')
-    plt.ylabel('Contribution to class 1')
-    plt.title(f'Estimated Shapley values for each rule, k={k}')
-    plt.savefig(f'ExplanationEvaluation/ex_ba2_contrib_score_c_k{k}.png')
-    plt.show()
-
-    # Plot the values for each rule with the rule_target as color according to the rule_inside_score_c0
-    plt.scatter(df['contribution_class_0'], df['contribution_class_1'], c=df['rule_inside_score_c0'], cmap='viridis')
-    plt.colorbar()
-    plt.xlabel('Contribution to class 0')
-    plt.ylabel('Contribution to class 1')
-    plt.title(f'Estimated Shapley values for each rule, k={k}')
-    plt.savefig(f'ExplanationEvaluation/ex_ba2_contrib_score_c{TARGET_CLASS}_k{k}.png')
-    plt.show()
-
-    # Plot the values for each rule with the rule_target as color according to the rule_inside_score_c1
-    plt.scatter(df['contribution_class_0'], df['contribution_class_1'], c=df['rule_inside_score_c1'], cmap='viridis')
-    plt.colorbar()
-    plt.xlabel('Contribution to class 0')
-    plt.ylabel('Contribution to class 1')
-    plt.title(f'Estimated Shapley values for each rule, k={k}')
-    plt.savefig(f'ExplanationEvaluation/ex_ba2_contrib_score_c{TARGET_CLASS}_k{k}.png')
-    plt.show()
-    """
-
-    df = pd.read_csv(f'ExplanationEvaluation/ex_ba_2motifs_kernel_shapley_rule{TARGET_CLASS}.csv')
-    df.sort_values(by=[f'contribution_class_{TARGET_CLASS}'], inplace=True, ascending=False)
-    # Get top 5 rules
-    top_5_rules = df.iloc[:5]
-
-    estimator = KernelShapRule('ba2', model, dataset, dataloader, activation_rules, targeted_class=TARGET_CLASS,
-                               strategy='deactivate')
-    start = time.time()
-    estimator.test(top_5_rules)
-    end = time.time()
-
-    return df
+            
 
 
 if __name__ == "__main__":

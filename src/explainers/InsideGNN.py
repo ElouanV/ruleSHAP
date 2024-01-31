@@ -93,7 +93,7 @@ class InsideGNN(BaseExplainer):
         names = {"ba_2motifs": ("ba_2motifs"),
                  "Aids": ("aids"),
                  "BBBP": ("Bbbp"),
-
+                "mutag" : ("mutag"),
                  "Mutagenicity": ("Mutagenicity")}
         name = names[self.config.datasets.dataset_name]
 
@@ -437,7 +437,8 @@ def labeled_rules(dataset, motif, negation):
              "BBBP": ("Bbbp"),
              "DD": ("DD"),
              "PROTEINS_full": ("Proteins"),
-             "Mutagenicity": ("Mutagenicity")}
+             "Mutagenicity": ("Mutagenicity"),
+             "mutag": ("mutag")}
 
     name = names[dataset]
     file = "ExplanationEvaluation/PatternMining/" + name + negation + "_" + get_motifs_file(

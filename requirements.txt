@@ -1,0 +1,15 @@
+pandas==1.2.3
+numpy
+networkx
+hydra-core
+torch
+torch_geometric
+torch_scatter
+torch_sparse
+torch_cluster
+torch_spline_conv
+tqdm
+pysubgroup
+omegaconf
+jupyter
+dig

@@ -260,10 +260,7 @@ class KernelShapRule():
             actual_preds = actual_preds.detach().cpu().numpy()
 
             for i in range(len(masked_batch_preds)):
-                if np.argmax(actual_preds[i]) == self.targeted_class:
-                    val.append(np.exp(-(l2_norm(actual_preds[i], masked_batch_preds[i]))))
-                else:
-                    val.append(np.exp(-(l2_norm(actual_preds[i], masked_batch_preds[i][::-1]))))
+                val.append(masked_batch_preds[i][self.targeted_class])
         return val
 
 
@@ -281,9 +278,12 @@ class KernelShapRule():
             # Apply softmax
             masked_batch_preds = torch.nn.functional.softmax(masked_batch_preds, dim=1)
             masked_batch_preds = masked_batch_preds.detach().cpu().numpy()
-            masked_batch_preds = masked_batch_preds[:, self.targeted_class]
-            val.append(masked_batch_preds)
-        val = np.concatenate(val)
+
+            actual_preds = self.model(data=batch) # x
+            actual_preds = torch.nn.functional.softmax(actual_preds, dim=1)
+            actual_preds = actual_preds.detach().cpu().numpy()
+            for i in range(len(masked_batch_preds)):
+                val.append(masked_batch_preds[i][self.targeted_class])
         return val
 
     def get_prediction(self, coalition):
@@ -332,7 +332,6 @@ class KernelShapRule():
 
         X = self.df.drop(columns=['score', 'weight'])
         y = self.df['score']
-        print (y)
         # Solve a weighted linear regression problem
         f = np.array(y.values)
         w = self.df['weight']
